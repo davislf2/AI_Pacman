@@ -3,7 +3,7 @@ from captureAgents import AgentFactory
 from game import Directions
 import random, time, util
 from util import nearestPoint
-
+from util import pause
 
 def createTeam(firstIndex, secondIndex, isRed,
                first = 'Attacker', second = 'Defender'):
@@ -328,12 +328,16 @@ class Defender(CaptureAgent):
     if len(invaders) > 0:
       positions = [agent.getPosition() for agent in invaders]
       self.target = min(positions, key = lambda x: self.getMazeDistance(mypos, x))
+      print 'positions', positions
     # If we can't see an invader, but our pacdots were eaten,
     # we will check the position where the pacdot disappeared.
     elif self.lastObservedFood != None:
       eaten = set(self.lastObservedFood) - set(self.getFoodYouAreDefending(gameState).asList())
       if len(eaten) > 0:
         self.target = eaten.pop()
+        print 'eaten', self.target
+      # print 
+    pause()
 
     # Update the agent memory about our pacdots.
     self.lastObservedFood = self.getFoodYouAreDefending(gameState).asList()

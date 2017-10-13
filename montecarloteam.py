@@ -337,7 +337,7 @@ class Defender(CaptureAgent):
         self.target = eaten.pop()
         print 'eaten', self.target
       # print 
-    pause()
+    # pause()
 
     # Update the agent memory about our pacdots.
     self.lastObservedFood = self.getFoodYouAreDefending(gameState).asList()

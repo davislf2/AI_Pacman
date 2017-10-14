@@ -9,25 +9,25 @@
 # 
 # 
 # These are modified codes from Part 3 for training the agent
-# import sys
-# sys.path.append('teams/disabledPacman')
+import sys
+sys.path.append('teams/disabledPacman')
 from game import Directions, Agent, Actions
 from captureAgents import CaptureAgent, AgentFactory
 import random,util,time,distanceCalculator 
 
 
 
-# class reinforcementFactory(AgentFactory):
-#     def __init__(self, isRed):
-#         AgentFactory.__int__(self,isRed)
-#         self.agentList = ['RLAgent','RLAgent']
+class reinforcementFactory(AgentFactory):
+    def __init__(self, isRed):
+        AgentFactory.__int__(self,isRed)
+        self.agentList = ['MultiPurposeAgent','MultiPurposeAgent']
 
-#     def getAgent(self,index):
-#         if len(self.agentList) > 0:
-#             agent = self.agentList.pop(0)
-#             if agent == 'RLAgent':
-#                 return RLAgent(index)
-#             return RLAgent(index)
+    def getAgent(self,index):
+        if len(self.agentList) > 0:
+            agent = self.agentList.pop(0)
+            if agent == 'MultiPurposeAgent':
+                return MultiPurposeAgent(index)
+            return MultiPurposeAgent(index)
 
 def createTeam(firstIndex, secondIndex, isRed,first = 'MultiPurposeAgent', second = 'MultiPurposeAgent'):
   """
@@ -67,13 +67,15 @@ class MultiPurposeAgent(CaptureAgent):
     are predefined using heuristics
     """
     def __init__(self, index, isRed,actionFn = None,numTraining = 0, 
-                 epsilon = 0.05, alpha =0.2, discount=0.8):
+                 epsilon = 0.0, alpha =0.2, discount=0.8):
         # initialize superclass
         CaptureAgent.__init__(self,index)
         # parameters for training
         if actionFn == None:
             actionFn = lambda state: state.getLegalActions(index)
         self.actionFn = actionFn
+        # these are for reinforcement (since it's become heuristic search)
+        # I just leave them for further improvement later on
         self.episodesSoFar = 0
         self.accumTrainRewards = 0.0
         self.accumTestRewards = 0.0
@@ -134,8 +136,8 @@ class MultiPurposeAgent(CaptureAgent):
     def getManualWeights(self):
         
         return {'closest-food':-100, 'eats-food':100,'bias':3,'#-of-ghosts-1-step-away':-500,
-                'distance-to-base':-100, 'distance-to-eat': -80, 'eat-pacman':200, 'avoid-pacman-power':-500,
-                'distance-to-mate': 0.11}
+                'distance-to-base':-100, 'distance-to-eat': -40, 'eat-pacman':200, 'avoid-pacman-power':-500,
+                'distance-to-mate': 0.18, 'distance-to-capsule': -30, 'eat-capsule':200, 'eat-scared-ghost': 200}
 
     def getFeatures(self, state, action, index, red, agentState):
         """
@@ -158,66 +160,99 @@ class MultiPurposeAgent(CaptureAgent):
             distToFood = self.getClosestFood(newPos,food.asList())
             opponents = self.getOpponents(state)
             teams = self.getTeam(state)
-        except Exception:
-            pass
 
-        features = util.Counter()
+            features = util.Counter()
 
-        ### Don't stay together with teammates
-        teams.remove(self.index)
-        features['distance-to-mate'] = self.getMazeDistance(newPos, state.getAgentPosition(teams[0]))
-        ghosts = []
-        try:
+            teams.remove(self.index)
+            # being close to teammate (negative reward (tiny))
+            features['distance-to-mate'] = self.getMazeDistance(newPos, state.getAgentPosition(teams[0]))
+            # get number of ghosts
+            ghosts = []
+            ghostState = []
             opp0 = state.getAgentState(opponents[0])
             opp1 = state.getAgentState(opponents[1])
             if not opp0.isPacman:
                 ghosts.append(state.getAgentPosition(opponents[0]))
+                ghostState.append(opp0)
             if not opp1.isPacman:
                 ghosts.append(state.getAgentPosition(opponents[1]))
+                ghostState.append(opp1)
+            features["#-of-ghosts-1-step-away"] = sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
+            # if action, eats scared ghost, flags it (with 1 and correspond to high weight)
+
+            if opp0.scaredTimer > 0:
+                if (next_x,next_y) == opponents[0]:
+                    features['eat-scared-ghost'] = 1
+            
+            if opp1.scaredTimer > 0:
+                if (next_x,next_y) == opponents[1]:
+                    features['eat-scared-ghost'] = 1
+            # if action gets you to ghosts, flags it (with 1 and correspond to negative weight)
+            features['bias'] = 1
+            if not features["#-of-ghosts-1-step-away"] and food[next_x][next_y]:
+                features["eats-food"] = 1.0
+
+            if distToFood is not None:
+                features["closest-food"] = float(distToFood) / (walls.width * walls.height)
+
+            nextState = state.generateSuccessor(self.index,action)
+            nextAgentState = nextState.getAgentState(self.index)
+            
+            if agentState.numCarrying > 3:
+                xbase = walls.width / 2
+                ybase = walls.height
+                if red:
+                    distTobase = self.getMazeDistance(self.start,newPos)
+                    features['distance-to-base'] = distTobase
+                else:
+                    distTobase = self.getMazeDistance(self.start,newPos)
+                    features['distance-to-base'] = distTobase
+            
+            if agentState.numCarrying >= 1:
+                if min(self.getMazeDistance(pos,ghosts[0]), self.getMazeDistance(pos,ghosts[1])) <= 5:
+                    xbase = walls.width / 2
+                    ybase = walls.height
+                    if red:
+                        distTobase = self.getMazeDistance(self.start,newPos)
+                        features['distance-to-base'] = distTobase
+                    else:
+                        distTobase = self.getMazeDistance(self.start,newPos)
+                        features['distance-to-base'] = distTobase
+
+            pacman = []
+            if opp0.isPacman: 
+                pacman.append(state.getAgentPosition(opponents[0]))
+            if opp1.isPacman:
+                pacman.append(state.getAgentPosition(opponents[1]))
+    
         except Exception:
             pass
-            # print "cannot see opponents"
+            pacman = []
 
-        # count the number of ghosts 1-step away
-        # and do not get to them (negative weights)
-        features["#-of-ghosts-1-step-away"] = sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
-        features['bias'] = 1
-        if not features["#-of-ghosts-1-step-away"] and food[next_x][next_y]:
-            features["eats-food"] = 1.0
-
-        if distToFood is not None:
-            # make the distance a number less than one otherwise the update
-            # will diverge wildly
-            features["closest-food"] = float(distToFood) / (walls.width * walls.height)
-
-        nextState = state.generateSuccessor(self.index,action)
-        nextAgentState = nextState.getAgentState(self.index)
-        if agentState.numCarrying > 2:
-            xbase = walls.width / 2
-            ybase = walls.height
-            if red:
-                distTobase = self.getMazeDistance(self.start,newPos)
-                features['distance-to-base'] = distTobase
-            else:
-                distTobase = self.getMazeDistance(self.start,newPos)
-                features['distance-to-base'] = distTobase
-
-        pacman = []
-        if opp0.isPacman:
-            pacman.append(state.getAgentPosition(opponents[0]))
-        if opp1.isPacman:
-            pacman.append(state.getAgentPosition(opponents[1]))
+        #### Features relevants to pacman in the area
         try:
-            distToEat0 = self.getMazeDistance(newPos,pacman[0])
+            if agentState.scaredTimer == 0:
+                distToEat0 = self.getMazeDistance(newPos,pacman[0])
         except Exception:
             distToEat0 = 999
         try:
-            distToEat1 = self.getMazeDistance(newPos,pacman[1]) 
+            if agentState.scaredTimer == 0:
+                distToEat1 = self.getMazeDistance(newPos,pacman[1]) 
         except Exception:
             distToEat1 = 999
-        distToEat = min(distToEat0,distToEat1)
-        if distToEat != 999:
-            features['distance-to-eat'] = distToEat    
+
+        try:
+            # if found pacman, give distance, (chase them)
+            distToEat = min(distToEat0,distToEat1)
+            if distToEat != 999:
+                features['distance-to-eat'] = distToEat    
+
+            capsules = self.getCapsules(state)
+            if (next_x,next_y) in capsules:
+                features['eat-capsule'] = 1 
+
+        except Exception:
+            pass
         try:
             if len(pacman) > 0:
                 if agentState.scaredTimer > 0:
@@ -233,9 +268,8 @@ class MultiPurposeAgent(CaptureAgent):
         except IndexError:
             pass
         
-
         features.divideAll(10.0)
-        # print features['avoid-pacman-power']
+
         return features
 
     def getClosestFood(self,position, foodList):
@@ -274,7 +308,6 @@ class MultiPurposeAgent(CaptureAgent):
         # print "[REWARD] ", reward
         # util.pause()
         return reward
-
 
 
     def chooseAction(self, state):
@@ -436,6 +469,8 @@ class MultiPurposeAgent(CaptureAgent):
 
     def isInTesting(self):
         return not self.isInTraining()
+
+# Final method is taken off to keep code brief
 
 def closestFood(pos, food, walls):
     """

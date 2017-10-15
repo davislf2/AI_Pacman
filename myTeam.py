@@ -191,18 +191,33 @@ class DefenseAgent(MCTSAgent):
     CaptureAgent.registerInitialState(self, gameState)
     self.distancer.getMazeDistances()
 
+#########################################################################################################
+#########################################################################################################
+#########################################################################################################
+#########################################################################################################
+    
+    self.numSims=2
+    self.sturns=1
     self.levels=3
-    self.numSims=10
     self.svalue=0 
     self.smoves=[]
-    self.sturns=10
     self.gameState = gameState
     self.current_node = Node( MState(self.gameState, self.index, self.svalue, self.smoves, self.sturns) )
     print '~~~register self.current_node', self.current_node
     self.startPosition = self.current_node.mstate.gameState.getAgentState(self.index).getPosition()
     print '~~~register Start location', self.startPosition
 
+    # if self.red:
+    #   print 'red' #It's red when registered
+    # else:
+    #   print 'blue'
+
   def chooseAction(self, gameState):
+
+    # if self.red:
+    #   print '~~~~~~~~~~~~ red' # Red
+    # else:
+    #   print '~~~~~~~~~~~~ blue'
 
     return self.runSimulation(self.current_node, gameState, self.index, self.levels, self.numSims)
 
@@ -214,6 +229,11 @@ class DefenseAgent(MCTSAgent):
     # You can profile your evaluation time by uncommenting these lines
     start = time.time()
     
+    # if self.red:
+    #   print '~~~~~~~~~~~~ red' # Red
+    # else:
+    #   print '~~~~~~~~~~~~ blue'
+
     print 'runSim/////////////////////////////////////////////'
     self.gameState = gameState
     self.index = index  
@@ -261,6 +281,11 @@ class DefenseAgent(MCTSAgent):
             'distance-to-base':-100, 'distance-to-eat': -40, 'eat-pacman':200, 'avoid-pacman-power':-500,
             'distance-to-mate': 0.18, 'distance-to-capsule': -30, 'eat-capsule':200, 'eat-scared-ghost': 200}
   
+  def getIsRed(self):
+    if self.index%2 == 0:
+      return True
+    else:
+      return False
 
   def getFeatures(self, gameState, action):
     features = util.Counter()
@@ -268,6 +293,17 @@ class DefenseAgent(MCTSAgent):
 
     myState = successor.getAgentState(self.index)
     myPos = myState.getPosition()
+
+    # self.isRed = False
+    # if self.index%2 == 0:
+    #   self.isRed = True
+    # else:
+    #   self.isRed = False
+
+    # if self.red:
+    #   print '~~~~~~~~~~~~ red index', self.index # Red
+    # else:
+    #   print '~~~~~~~~~~~~ blue index', self.index
 
     # Computes whether we're on defense (1) or offense (0)
     features['onDefense'] = 1
@@ -299,11 +335,27 @@ class DefenseAgent(MCTSAgent):
       # features['distToHome'] = self.getMazeDistance(self.startPosition,myPos)
       # features['distToHome'] = self.getMazeDistance(startPos, myPos)
       # features['distToHome'] = self.getMazeDistance(self.start, myPos)
-   
+
+
+    if self.getIsRed():
+      centralX = (gameState.data.layout.width - 2)/2
+    else:
+      centralX = ((gameState.data.layout.width - 2)/2) + 1
+
+    centralY = (gameState.data.layout.height)/2
+    centralPos = (centralX, centralY)
+
+
+    if len(invaders) > 0:
+      features['distToCentral'] = 0
+    else:
+      features['distToCentral'] = distanceCalculator.Distancer(gameState.data.layout).getDistance(centralPos, myPos)
+
+
     return features
 
   def getWeights(self, gameState, action):
-    return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'distToHome': 10}
+    return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'distToHome': 5, 'distToCentral': -5}
     # return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'distToHome': 3}
 
 #MCTS scalar.  Larger scalar will increase exploitation, smaller will increase exploration. 
@@ -333,7 +385,7 @@ class MState():
     self.index=index
     self.value=value
 
-  def deepCopy( self ):
+  def deepCopy(self):
     mstate = MState( self, self.gameState, self.index )
     mstate.gameState = self.gameState
     mstate.index = self.index
@@ -343,7 +395,11 @@ class MState():
     mstate.fromMove = self.fromMove
     return mstate
 
-  def next_mstate(self):
+  def getFromMove(self):
+    return self.fromMove
+
+  # def next_mstate(self, oMState = None):
+  def next_mstate(self, oNode = None):
 
     # print '|||||||next_mstate'
     # print '-------gameState', self.gameState.getAgentState(self.index).getPosition()
@@ -353,12 +409,41 @@ class MState():
     # The agent should not stay STOP
     actions.remove(Directions.STOP)
 
+    # if oMState == None:
+    #   otherMState = []
+    # else:
+    #   otherMState = oMState
+    #   print 'otherMState', otherMState
+    #   if otherMState != []:
+    #     actions.remove(otherMState.getFromMove())   
+
+    if oNode == None:
+      otherNode = []
+    else:
+      otherNode = oNode
+      print 'otherNode', otherNode
+      if otherNode != []:
+        for n in otherNode:
+          actions.remove(n.mstate.getFromMove())   
+
     # print '+++++Legal actions', actions
     nextmove = random.choice([x for x in actions])
     self.move = nextmove
 
     nextGameState = self.gameState.generateSuccessor(self.index, nextmove)
-    nextValue = DefenseAgent(self.index, 0.1).evaluate(self.gameState, nextmove)
+    # nextValue = DefenseAgent(self.index, 0.1).evaluate(self.gameState, nextmove)
+
+    da = DefenseAgent(self.index, 0.1)
+    nextValue = da.evaluate(self.gameState, nextmove)
+
+    # if da.getIsRed():
+    #   print '~~~~~~~~~~~~ red index', self.index # Red
+    # else:
+    #   print '~~~~~~~~~~~~ blue index', self.index
+
+    # nextFeatures = DefenseAgent(self.index, 0.1).getFeatures(self.gameState, nextmove)
+    # print '***************** action', nextmove
+    # print 'Features', nextFeatures
 
     nextMState = MState(nextGameState, self.index, nextValue, nextmove, nextmove, self.turn-1)
 
@@ -415,13 +500,34 @@ class Node():
     actions.remove(Directions.STOP)
     availableActions = len(actions)
     print 'availableActions', availableActions, actions
-    if len(self.children) == availableActions:  
+    print 'len(self.children)', len(self.children), self.children
+    if len(self.children) == availableActions:   # If it's fully expanded
+      printChildrenPosition(self.children)
       return True
     return False
   def __repr__(self):
     s="Node; children: %d; visits: %d; reward: %f"%(len(self.children),self.visits,self.reward)
     return s
-    
+
+# For debugging
+def printChildrenPosition(children):
+  if len(children) == 1:
+    print 'Children Position == 1'
+    print children[0].getState().gameState.getAgentPosition(2)
+  elif len(children) > 1:
+    print 'Children Position > 1'
+    for c in children:
+      print c.getState().gameState.getAgentPosition(2)
+
+def printChildrenStatePosition(children):
+  if len(children) == 1:
+    print 'Children State Position == 1'
+    print 'children', children
+    print children.gameState.getAgentPosition(2)
+  elif len(children) > 1:
+    print 'Children State Position > 1'
+    for c in children:
+      print c.gameState.getAgentPosition(2)
 
 def UCTSEARCH(budget,root,index):
   print 'UCTSEARCH'
@@ -430,7 +536,7 @@ def UCTSEARCH(budget,root,index):
     if iter%10000==9999:
       logger.info("simulation: %d"%iter)
       logger.info(root)
-    print 'root', root, 'type(root)', type(root)
+    # print 'root', root, 'type(root)', type(root)
     front=TREEPOLICY(root,index)
     reward=DEFAULTPOLICY(front.mstate)
     BACKUP(root,front,reward)
@@ -469,23 +575,51 @@ def TREEPOLICY(node,index):
 
 def EXPAND(node):
   print 'EXPAND'
-  tried_children_mstate=[c.mstate for c in node.children]
-  print 'tried_children_state', tried_children_mstate
-  new_mstate=node.mstate.next_mstate()
-  # print 'new_mstate', new_mstate
-  counter = 0
-  while new_mstate in tried_children_mstate:
-    actions = node.mstate.gameState.getLegalActions(node.mstate.index)
-    actions.remove(Directions.STOP)
-    print 'new_mstate in tried, len(actions):', len(actions)
-    # print 'node location', node.mstate.gameState.getAgentState(node.mstate.index).getPosition()
-    if len(actions) == 1:   # if it only has one possible direction, then jump out
-      break
-    new_mstate=node.mstate.next_mstate()
-    counter = counter+1   # still not solved
-    if counter > 5:
-      break
-    # print 'new_mstate', new_mstate   
+  # tried_children_mstate=[c.mstate for c in node.children]
+  # if tried_children_mstate != []:
+  #   print 'tried_children', tried_children_mstate
+  #   print 'tried_children_mstate', tried_children_mstate.mstate
+  # print 'tried_children_state position', printChildrenStatePosition(tried_children_mstate)
+
+
+  tried_children=[c for c in node.children]
+
+  if tried_children != []:
+    print 'tried_children', tried_children
+    # print 'tried_children.mstate', tried_children.mstate
+    print 'tried_children position', printChildrenPosition(tried_children)  
+
+  # tried_children_mstate.gameState.getAgentPosition(2)  
+  # new_mstate=node.mstate.next_mstate(tried_children_mstate)
+
+  new_mstate=node.mstate.next_mstate(tried_children)
+
+  tried_children_mstate = []
+
+  if tried_children != []:
+    for t in tried_children:
+      tried_children_mstate.append(t.mstate)
+  # else:
+  #   tried_children_mstate = []
+
+  # if tried_children_mstate != []:
+  #   # print 'new_mstate', new_mstate
+  #   # Then it should not go here
+  #   counter = 0
+  #   while new_mstate in tried_children_mstate:
+  #     actions = node.mstate.gameState.getLegalActions(node.mstate.index)
+  #     actions.remove(Directions.STOP)
+  #     print 'new_mstate in tried, len(actions):', len(actions)
+  #     # print 'node location', node.mstate.gameState.getAgentState(node.mstate.index).getPosition()
+  #     if len(actions) == 1:   # if it only has one possible direction, then jump out
+  #       break
+  #     new_mstate=node.mstate.next_mstate()
+  #     counter = counter+1   # still not solved
+  #     if counter > 5:
+  #       break
+  #     # print 'new_mstate', new_mstate   
+
+
   print 'Until new_mstate not in tried_children_mstate', new_mstate
   node.add_child(new_mstate)
   # for child in node.children:
@@ -495,7 +629,7 @@ def EXPAND(node):
 
 #current this uses the most vanilla MCTS formula it is worth experimenting with THRESHOLD ASCENT (TAGS)
 def BESTCHILD(node,scalar,index):
-  print 'BESTCHILD'
+  print 'BESTCHILD scalar  ====================  ', scalar
   print 'node location', node.mstate.gameState.getAgentPosition(index)
   bestscore = -9999999999
   bestchildren=[]
@@ -519,7 +653,7 @@ def BESTCHILD(node,scalar,index):
   # if bestchildren!=[] and index==2:
   if bestchildren!=[]:
     # return random.choice(bestchildren)
-    print 'bestchildren', bestchildren
+    print 'bestchildren ---------------------- ', bestchildren[0].mstate.gameState.getAgentPosition(index)
     return bestchildren[0]
   else:
     return bestchildren
@@ -536,6 +670,8 @@ def BACKUP(root,node,reward):
   while node!=None:
     node.visits+=1
     node.reward+=reward
+    node.reward+=node.mstate.reward() # add the root reward and the last reward together
+
     node=node.parent
     # node.parent = root
     # if node!=None:

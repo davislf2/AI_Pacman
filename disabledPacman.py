@@ -137,7 +137,7 @@ class MultiPurposeAgent(CaptureAgent):
         
         return {'closest-food':-100, 'eats-food':100,'bias':3,'#-of-ghosts-1-step-away':-500,
                 'distance-to-base':-100, 'distance-to-eat': -40, 'eat-pacman':200, 'avoid-pacman-power':-500,
-                'distance-to-mate': 0.18, 'distance-to-capsule': -30, 'eat-capsule':200, 'eat-scared-ghost': 200}
+                'distance-to-capsule': -30, 'eat-capsule':200, 'eat-scared-ghost': 200}
 
     def getFeatures(self, state, action, index, red, agentState):
         """
@@ -164,29 +164,33 @@ class MultiPurposeAgent(CaptureAgent):
             features = util.Counter()
 
             teams.remove(self.index)
-            # being close to teammate (negative reward (tiny))
-            features['distance-to-mate'] = self.getMazeDistance(newPos, state.getAgentPosition(teams[0]))
             # get number of ghosts
             ghosts = []
             ghostState = []
             opp0 = state.getAgentState(opponents[0])
             opp1 = state.getAgentState(opponents[1])
             if not opp0.isPacman:
-                ghosts.append(state.getAgentPosition(opponents[0]))
-                ghostState.append(opp0)
+                if opp0.scaredTimer > 0 and (next_x,next_y) == state.getAgentPosition(opponents[0]):
+                    features['eat-scared-ghost'] = 1
+                else:
+                    ghosts.append(state.getAgentPosition(opponents[0]))
+                    ghostState.append(opp0)
             if not opp1.isPacman:
-                ghosts.append(state.getAgentPosition(opponents[1]))
-                ghostState.append(opp1)
+                if opp1.scaredTimer > 0 and (next_x,next_y) == state.getAgentPosition(opponents[1]):
+                    features['eat-scared-ghost'] = 1
+                else:
+                    ghosts.append(state.getAgentPosition(opponents[1]))
+                    ghostState.append(opp1)
             features["#-of-ghosts-1-step-away"] = sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
             # if action, eats scared ghost, flags it (with 1 and correspond to high weight)
 
-            if opp0.scaredTimer > 0:
-                if (next_x,next_y) == opponents[0]:
-                    features['eat-scared-ghost'] = 1
+            # if opp0.scaredTimer > 0:
+            #     if (next_x,next_y) == opponents[0]:
+            #         features['eat-scared-ghost'] = 1
             
-            if opp1.scaredTimer > 0:
-                if (next_x,next_y) == opponents[1]:
-                    features['eat-scared-ghost'] = 1
+            # if opp1.scaredTimer > 0:
+            #     if (next_x,next_y) == opponents[1]:
+            #         features['eat-scared-ghost'] = 1
             # if action gets you to ghosts, flags it (with 1 and correspond to negative weight)
             features['bias'] = 1
             if not features["#-of-ghosts-1-step-away"] and food[next_x][next_y]:

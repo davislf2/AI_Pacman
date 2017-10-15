@@ -178,6 +178,14 @@ class AttackAgent(MCTSAgent):
 
     return {'successorScore': 100, 'distanceToFood': -1, 'distanceToGhost': 10}
 
+#MCTS scalar.  Larger scalar will increase exploitation, smaller will increase exploration. 
+SCALAR=1/math.sqrt(2.0)
+REWARD_DISCOUNT=0.9
+SIM_LEVEL=1
+
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger('MyLogger')
+
 class DefenseAgent(MCTSAgent):
   """
   A reflex agent that keeps its side Pacman-free. Again,
@@ -185,6 +193,14 @@ class DefenseAgent(MCTSAgent):
   could be like.  It is not the best or only way to make
   such an agent.
   """
+
+  def __init__(self, index, timeForComputing = .1):
+    CaptureAgent.__init__(self, index)
+    self.target = None
+    self.lastObservedFood = None
+    # This variable will store our patrol points and
+    # the agent probability to select a point as target.
+    self.patrolDict = {}
 
 #######  Monte Carlo Tree Search Simulation
   def registerInitialState(self, gameState):
@@ -197,7 +213,7 @@ class DefenseAgent(MCTSAgent):
 #########################################################################################################
     
     self.numSims=2
-    self.sturns=1
+    self.sturns=SIM_LEVEL
     self.levels=3
     self.svalue=0 
     self.smoves=[]
@@ -206,6 +222,22 @@ class DefenseAgent(MCTSAgent):
     print '~~~register self.current_node', self.current_node
     self.startPosition = self.current_node.mstate.gameState.getAgentState(self.index).getPosition()
     print '~~~register Start location', self.startPosition
+
+    if self.red:
+      centralX = (gameState.data.layout.width - 2)/2
+    else:
+      centralX = ((gameState.data.layout.width - 2)/2) + 1
+    self.noWallSpots = []
+    for i in range(1, gameState.data.layout.height - 1):
+      if not gameState.hasWall(centralX, i):
+        self.noWallSpots.append((centralX, i))
+    # Remove some positions. The agent do not need to patrol
+    # all positions in the central area.
+    while len(self.noWallSpots) > (gameState.data.layout.height -2)/2:
+      self.noWallSpots.pop(0)
+      self.noWallSpots.pop(len(self.noWallSpots)-1)
+    # Update probabilities to each patrol point.
+    self.distFoodToPatrol(gameState)
 
     # if self.red:
     #   print 'red' #It's red when registered
@@ -275,6 +307,40 @@ class DefenseAgent(MCTSAgent):
 
 ########  End of Monte Carlo Tree Search Simulation
 
+  def distFoodToPatrol(self, gameState):
+    food = self.getFoodYouAreDefending(gameState).asList()
+    total = 0
+
+    # Get the minimum distance from the food to our
+    # patrol points.
+    for position in self.noWallSpots:
+      closestFoodDist = "+inf"
+      for foodPos in food:
+        dist = self.getMazeDistance(position, foodPos)
+        if dist < closestFoodDist:
+          closestFoodDist = dist
+      # We can't divide by 0!
+      if closestFoodDist == 0:
+        closestFoodDist = 1
+      self.patrolDict[position] = 1.0/float(closestFoodDist)
+      total += self.patrolDict[position]
+    # Normalize the value used as probability.
+    if total == 0:
+      total = 1
+    for x in self.patrolDict.keys():
+      self.patrolDict[x] = float(self.patrolDict[x])/float(total)
+
+  def selectPatrolTarget(self):
+    """
+    Select some patrol point to use as target.
+    """
+    rand = random.random()
+    sum = 0.0
+    for x in self.patrolDict.keys():
+      sum += self.patrolDict[x]
+      if rand < sum:
+        return x
+
   def getManualWeights(self):
         
     return {'closest-food':-100, 'eats-food':100,'bias':3,'#-of-ghosts-1-step-away':-500,
@@ -299,11 +365,6 @@ class DefenseAgent(MCTSAgent):
     #   self.isRed = True
     # else:
     #   self.isRed = False
-
-    # if self.red:
-    #   print '~~~~~~~~~~~~ red index', self.index # Red
-    # else:
-    #   print '~~~~~~~~~~~~ blue index', self.index
 
     # Computes whether we're on defense (1) or offense (0)
     features['onDefense'] = 1
@@ -345,24 +406,53 @@ class DefenseAgent(MCTSAgent):
     centralY = (gameState.data.layout.height)/2
     centralPos = (centralX, centralY)
 
-
     if len(invaders) > 0:
       features['distToCentral'] = 0
     else:
       features['distToCentral'] = distanceCalculator.Distancer(gameState.data.layout).getDistance(centralPos, myPos)
-
+    
+    features['distToLostFood'] = self.observeLostFood(gameState, action)
 
     return features
 
+  def observeLostFood(self, gameState, action):
+
+    # Observe lostFood
+    distToLostFood = 0
+
+    if self.lastObservedFood and len(self.lastObservedFood) != len(self.getFoodYouAreDefending(gameState).asList()):
+      self.distFoodToPatrol(gameState)
+
+    mypos = gameState.getAgentPosition(self.index)
+    if mypos == self.target:
+      self.target = None
+
+    # x = self.getOpponents(gameState) 
+    # enemies  = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
+    # invaders = filter(lambda x: x.isPacman and x.getPosition() != None, enemies)
+    # if len(invaders) > 0:
+    #   positions = [agent.getPosition() for agent in invaders]
+    #   self.target = min(positions, key = lambda x: self.getMazeDistance(mypos, x))
+    #   print 'positions', positions
+    # # If we can't see an invader, but our pacdots were eaten,
+    # # we will check the position where the pacdot disappeared.
+    if self.lastObservedFood != None:
+      eaten = set(self.lastObservedFood) - set(self.getFoodYouAreDefending(gameState).asList())
+      if len(eaten) > 0:
+        self.target = eaten.pop()
+        print 'eaten', self.target
+        distToLostFood = distanceCalculator.Distancer(gameState.data.layout).getDistance(self.target, mypos)
+
+    # Update the agent memory about our pacdots.
+    self.lastObservedFood = self.getFoodYouAreDefending(gameState).asList()
+
+    return distToLostFood
+
   def getWeights(self, gameState, action):
-    return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'distToHome': 5, 'distToCentral': -5}
+    # return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'distToCentral': -3}
+    return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'distToHome': 5, 'distToCentral': -5, 'distToLostFood': -10}
     # return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'distToHome': 3}
 
-#MCTS scalar.  Larger scalar will increase exploitation, smaller will increase exploration. 
-SCALAR=1/math.sqrt(2.0)
-
-logging.basicConfig(level=logging.WARNING)
-logger = logging.getLogger('MyLogger')
 
 class MState():
   NUM_TURNS = 5
@@ -669,7 +759,7 @@ def BACKUP(root,node,reward):
   print 'BACKUP'
   while node!=None:
     node.visits+=1
-    node.reward+=reward
+    node.reward+=reward*(REWARD_DISCOUNT**SIM_LEVEL) # discounted reward after several turns of simulation
     node.reward+=node.mstate.reward() # add the root reward and the last reward together
 
     node=node.parent

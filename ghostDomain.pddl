@@ -2,23 +2,29 @@
     (:requirements :typing)
     (:types position)
 
-    ;; Define the facts in the problem
-    ;; "?" denotes a variable, "-" a type
+    ;; The predicates represent a set of connected grid locations that can be
+    ;; moved between and visited.
     (:predicates
         (move ?from ?to - position)
         (at ?pos - position)
-        (connected ?pos1 ?pos2 - position)
+        (visited ?pos - position)
+        (connected ?from ?to - position)
     )
 
-    ;; Define the action(s)
+    ;; A Ghost's only action available is to move to a connected position.
     (:action move
         :parameters
             (?from ?to - position)
         :precondition
-            (and (at ?from)
-            (connected ?from ?to))
+            (and
+                (at ?from)
+                (connected ?from ?to)
+            )
         :effect
-            (and (at ?to)
-            (not (at ?from)))
+            (and
+                (not (at ?from))
+                (at ?to)
+                (visited ?to)
+            )
     )
 )

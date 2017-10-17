@@ -32,9 +32,10 @@ from util import nearestPoint
 #################
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'OffensiveReflexAgent', second = 'OffensiveReflexAgent'):
+                first = 'OffensiveReflexAgent', second = 'DefensiveReflexAgent'):
+               # first = 'OffensiveReflexAgent', second = 'OffensiveReflexAgent'):
                # first = 'DefensiveReflexAgent', second = 'DefensiveReflexAgent'):
-               # first = 'OffensiveReflexAgent', second = 'DefensiveReflexAgent'):
+               
   """
   This function should return a list of two agents that will form the
   team, initialized using firstIndex and secondIndex as their agent
@@ -178,6 +179,7 @@ class DefensiveReflexAgent(ReflexCaptureAgent):
     if len(invaders) > 0:
       dists = [self.getMazeDistance(myPos, a.getPosition()) for a in invaders]
       features['invaderDistance'] = min(dists)
+      print 'min(dists)', min(dists)
 
     if action == Directions.STOP: features['stop'] = 1
     rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]

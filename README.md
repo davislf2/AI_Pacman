@@ -1,4 +1,16 @@
+
+
+
+
 This project is based on the "Contest: Pacman Capture the Flag" project in the UC Berkeley CS188 Intro to AI Course. Three techniques of Pacman AI are implemented: Heuristic Search, Monte-Carlo Tree Search (MCTS), and PDDL.
+
+Contributors:
+
+[Teeraroj Chanchokpong](Tchanchokpon@student.unimelb.edu.au): Heuristic Search Agent (agent 1)
+
+[Davis Hong](davislf2.net@gmail.com): Monte-Carlo Tree Search Agent (agent 2)
+
+[JamesAndrewRogers](jarogers@student.unimelb.edu.au): PDDL agent
 
 
 
@@ -6,6 +18,14 @@ This project is based on the "Contest: Pacman Capture the Flag" project in the U
 
 
 
-The complete report of this Pacman agent is [here](http://bit.ly/DisabledPacman).
+Environment: Python 2.7
 
-The slide of this project is [here](http://bit.ly/pacmanSlides).
+Run:
+
+```sh
+# -r: red team
+# -b: blue team
+# detailed commands on CS188 Intro to AI
+python2 capture.py -r baselineTeam.py -b disabledPacman.py -l RANDOM2
+```
+
